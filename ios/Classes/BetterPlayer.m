@@ -64,9 +64,30 @@ AVPictureInPictureController *_pipController;
                                                  selector:@selector(itemDidPlayToEndTime:)
                                                      name:AVPlayerItemDidPlayToEndTimeNotification
                                                    object:item];
+
+        // [[NSNotificationCenter defaultCenter] addObserver:self
+        //                                  selector:@selector(handleErrorLogEntry:)
+        //                                      name:AVPlayerItemNewErrorLogEntryNotification
+        //                                    object:nil];
+
         self._observersAdded = true;
     }
 }
+
+// - (void)handleErrorLogEntry:(NSNotification *)notification {
+//     AVPlayerItem *playerItem = notification.object;
+//     AVPlayerItemErrorLog *errorLog = playerItem.errorLog;
+//     AVPlayerItemErrorLogEvent *lastEvent = [errorLog.events lastObject];
+//     NSString *lastErrorComment = lastEvent.errorComment;
+
+//     if (_eventSink != nil) {
+//         _eventSink([FlutterError
+//                     errorWithCode:@"VideoError"
+//                     message:[@"Failed to load video: " stringByAppendingString:lastErrorComment]
+//                     details:nil]);
+//     }
+
+// }
 
 - (void)clear {
     _isInitialized = false;
@@ -81,6 +102,7 @@ AVPictureInPictureController *_pipController;
     if (_player.currentItem == nil) {
         return;
     }
+
 
     [self removeObservers];
     AVAsset* asset = [_player.currentItem asset];
@@ -104,7 +126,11 @@ AVPictureInPictureController *_pipController;
         [[_player currentItem] removeObserver:self
                                    forKeyPath:@"playbackBufferFull"
                                       context:playbackBufferFullContext];
+        // [[NSNotificationCenter defaultCenter] removeObserver:self
+        //                                         name:AVPlayerItemNewErrorLogEntryNotification
+        //                                       object:nil];
         [[NSNotificationCenter defaultCenter] removeObserver:self];
+
         self._observersAdded = false;
     }
 }
@@ -113,6 +139,7 @@ AVPictureInPictureController *_pipController;
     if (_isLooping) {
         AVPlayerItem* p = [notification object];
         [p seekToTime:kCMTimeZero completionHandler:nil];
+        _eventSink(@{@"event" : @"completed", @"key" : _key});
     } else {
         if (_eventSink) {
             _eventSink(@{@"event" : @"completed", @"key" : _key});
@@ -121,7 +148,6 @@ AVPictureInPictureController *_pipController;
         }
     }
 }
-
 
 static inline CGFloat radiansToDegrees(CGFloat radians) {
     // Input range [-pi, pi] or [-180, 180]
@@ -289,11 +315,12 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
     else if (context == statusContext) {
         AVPlayerItem* item = (AVPlayerItem*)object;
+        AVPlayerItemErrorLog *errorLog;
+        NSData *logData;
+        NSString *strData;
         switch (item.status) {
             case AVPlayerItemStatusFailed:
-                NSLog(@"Failed to load video:");
-                NSLog(item.error.debugDescription);
-
+                NSLog(@"rpc: Failed to load video with error: %@", item.error.debugDescription);
                 if (_eventSink != nil) {
                     _eventSink([FlutterError
                                 errorWithCode:@"VideoError"
@@ -303,8 +330,10 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
                 }
                 break;
             case AVPlayerItemStatusUnknown:
+                NSLog(@"rpc: Status unknown");
                 break;
             case AVPlayerItemStatusReadyToPlay:
+                NSLog(@"rpc: Status ready to play");
                 [self onReadyToPlay];
                 break;
         }
@@ -671,6 +700,7 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     [_eventChannel setStreamHandler:nil];
     [self disablePictureInPicture];
     [self setPictureInPicture:false];
+    [_player replaceCurrentItemWithPlayerItem:nil];
     _disposed = true;
 }
 

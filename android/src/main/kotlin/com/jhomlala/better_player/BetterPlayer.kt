@@ -410,7 +410,7 @@ internal class BetterPlayer(
                     }
                 }
                 .createMediaSource(mediaItem)
-            C.CONTENT_TYPE_DASH -> DashMediaSource.Factory(
+            C.CONTENT_TYPE_SS -> DashMediaSource.Factory(
                 DefaultDashChunkSource.Factory(mediaDataSourceFactory),
                 DefaultDataSource.Factory(context, mediaDataSourceFactory)
             )

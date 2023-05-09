@@ -400,7 +400,7 @@ class _BetterPlayerMaterialControlsState
   Widget _buildHitAreaClickableButton(
       {Widget? icon, required void Function() onClicked}) {
     return Container(
-      constraints: widget.controlsConfiguration.controlSizeConstraints,
+      constraints: const BoxConstraints(maxHeight: 80.0, maxWidth: 80.0),
       child: BetterPlayerMaterialClickableWidget(
         onTap: onClicked,
         child: Align(

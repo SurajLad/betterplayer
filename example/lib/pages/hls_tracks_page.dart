@@ -20,7 +20,8 @@ class _HlsTracksPageState extends State<HlsTracksPage> {
     BetterPlayerDataSource dataSource = BetterPlayerDataSource(
       BetterPlayerDataSourceType.network,
       // Constants.hlsTestStreamUrl,
-      "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8",
+      "https://live-par-2-abr.livepush.io/vod/bigbuckbunny/index.m3u8",
+      // "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8",
       videoFormat: BetterPlayerVideoFormat.hls,
     );
     _betterPlayerController = BetterPlayerController(betterPlayerConfiguration);

@@ -22,7 +22,6 @@ dependencies:
   path_provider: ^2.0.11
   collection: ^1.16.0
   xml: ^6.1.0
-  # firebase_analytics: "^10.1.0"
 
 dev_dependencies:
   lint: ^1.10.0

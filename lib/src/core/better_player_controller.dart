@@ -6,6 +6,7 @@ import 'package:better_player/src/configuration/better_player_controller_event.d
 import 'package:better_player/src/core/better_player_utils.dart';
 import 'package:better_player/src/subtitles/better_player_subtitle.dart';
 import 'package:better_player/src/subtitles/better_player_subtitles_factory.dart';
+import 'package:better_player/src/video_player/video_player.dart';
 import 'package:better_player/src/video_player/video_player_platform_interface.dart';
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:flutter/material.dart';
@@ -112,8 +113,6 @@ class BetterPlayerController {
 
   Stream<int?> get nextVideoTimeStream => _nextVideoTimeStreamController.stream;
 
-  bool get isDisposed => _disposed;
-
   ///Has player been disposed.
   bool _disposed = false;
 
@@ -212,8 +211,6 @@ class BetterPlayerController {
   ///Currently displayed [BetterPlayerSubtitle].
   BetterPlayerSubtitle? renderedSubtitle;
 
-  bool hasCachingResourceError = false;
-
   BetterPlayerController(
     this.betterPlayerConfiguration, {
     this.betterPlayerPlaylistConfiguration,
@@ -237,15 +234,10 @@ class BetterPlayerController {
 
   ///Setup new data source in Better Player.
   Future setupDataSource(BetterPlayerDataSource betterPlayerDataSource) async {
-    postEvent(
-      BetterPlayerEvent(
-        BetterPlayerEventType.setupDataSource,
+    postEvent(BetterPlayerEvent(BetterPlayerEventType.setupDataSource,
         parameters: <String, dynamic>{
           _dataSourceParameter: betterPlayerDataSource,
-        },
-      ),
-    );
-
+        }));
     _postControllerEvent(BetterPlayerControllerEvent.setupDataSource);
     _hasCurrentDataSourceStarted = false;
     _hasCurrentDataSourceInitialized = false;
@@ -255,8 +247,8 @@ class BetterPlayerController {
     ///Build videoPlayerController if null
     if (videoPlayerController == null) {
       videoPlayerController = VideoPlayerController(
-        bufferingConfiguration: betterPlayerDataSource.bufferingConfiguration,
-      );
+          bufferingConfiguration:
+              betterPlayerDataSource.bufferingConfiguration);
       videoPlayerController?.addListener(_onVideoPlayerChanged);
     }
 
@@ -267,9 +259,8 @@ class BetterPlayerController {
     final List<BetterPlayerSubtitlesSource>? betterPlayerSubtitlesSourceList =
         betterPlayerDataSource.subtitles;
     if (betterPlayerSubtitlesSourceList != null) {
-      _betterPlayerSubtitlesSourceList.addAll(
-        betterPlayerDataSource.subtitles!,
-      );
+      _betterPlayerSubtitlesSourceList
+          .addAll(betterPlayerDataSource.subtitles!);
     }
 
     if (_isDataSourceAsms(betterPlayerDataSource)) {
@@ -468,10 +459,6 @@ class BetterPlayerController {
           author: _betterPlayerDataSource?.notificationConfiguration?.author,
           imageUrl:
               _betterPlayerDataSource?.notificationConfiguration?.imageUrl,
-          skipForwardTimeInMilliseconds: _betterPlayerDataSource
-              ?.notificationConfiguration?.skipForwardTimeInMilliseconds,
-          skipBackwardTimeInMilliseconds: _betterPlayerDataSource
-              ?.notificationConfiguration?.skipBackwardTimeInMilliseconds,
           notificationChannelName: _betterPlayerDataSource
               ?.notificationConfiguration?.notificationChannelName,
           overriddenDuration: _betterPlayerDataSource!.overriddenDuration,
@@ -504,10 +491,6 @@ class BetterPlayerController {
             author: _betterPlayerDataSource?.notificationConfiguration?.author,
             imageUrl:
                 _betterPlayerDataSource?.notificationConfiguration?.imageUrl,
-            skipForwardTimeInMilliseconds: _betterPlayerDataSource
-                ?.notificationConfiguration?.skipForwardTimeInMilliseconds,
-            skipBackwardTimeInMilliseconds: _betterPlayerDataSource
-                ?.notificationConfiguration?.skipBackwardTimeInMilliseconds,
             notificationChannelName: _betterPlayerDataSource
                 ?.notificationConfiguration?.notificationChannelName,
             overriddenDuration: _betterPlayerDataSource!.overriddenDuration,
@@ -528,10 +511,6 @@ class BetterPlayerController {
                   _betterPlayerDataSource?.notificationConfiguration?.author,
               imageUrl:
                   _betterPlayerDataSource?.notificationConfiguration?.imageUrl,
-              skipForwardTimeInMilliseconds: _betterPlayerDataSource
-                  ?.notificationConfiguration?.skipForwardTimeInMilliseconds,
-              skipBackwardTimeInMilliseconds: _betterPlayerDataSource
-                  ?.notificationConfiguration?.skipBackwardTimeInMilliseconds,
               notificationChannelName: _betterPlayerDataSource
                   ?.notificationConfiguration?.notificationChannelName,
               overriddenDuration: _betterPlayerDataSource!.overriddenDuration,
@@ -548,7 +527,6 @@ class BetterPlayerController {
         throw UnimplementedError(
             "${betterPlayerDataSource.type} is not implemented");
     }
-
     await _initializeVideo();
   }
 
@@ -611,6 +589,7 @@ class BetterPlayerController {
 
   ///Enables full screen mode in player. This will trigger route change.
   void enterFullScreen() {
+    if (_isFullScreen) return;
     _isFullScreen = true;
     _postControllerEvent(BetterPlayerControllerEvent.openFullscreen);
   }
@@ -645,10 +624,6 @@ class BetterPlayerController {
       _postEvent(BetterPlayerEvent(BetterPlayerEventType.play));
       _postControllerEvent(BetterPlayerControllerEvent.play);
     }
-  }
-
-  void resetAppLifeCycleState() {
-    _appLifecycleState = AppLifecycleState.resumed;
   }
 
   ///Enables/disables looping (infinity playback) mode.
@@ -786,70 +761,20 @@ class BetterPlayerController {
 
   ///Listener used to handle video player changes.
   void _onVideoPlayerChanged() async {
-    final possibleCacheServerErrors = [
-      "resource unavailable",
-      "could not connect to the server",
-      "the operation couldnt be completed",
-    ];
-
-    final ignorableErrorLogs = [
-      "Segment exceeds specified bandwidth for variant",
-    ];
-
     final VideoPlayerValue currentVideoPlayerValue =
         videoPlayerController?.value ??
             VideoPlayerValue(duration: const Duration());
 
     if (currentVideoPlayerValue.hasError) {
       _videoPlayerValueOnError ??= currentVideoPlayerValue;
-
-      String errorString = currentVideoPlayerValue.errorDescription ?? '';
-      String cleanErrorString =
-          errorString.replaceAll(RegExp('[^a-zA-Z0-9\\s+]'), '').toLowerCase();
-
-      bool isResourceError = false;
-      for (String possibleError in possibleCacheServerErrors) {
-        if (cleanErrorString.contains(possibleError.toLowerCase())) {
-          isResourceError = true;
-          break;
-        }
-      }
-
       _postEvent(
         BetterPlayerEvent(
           BetterPlayerEventType.exception,
-          parameters: <String, dynamic>{"exception": errorString},
+          parameters: <String, dynamic>{
+            "exception": currentVideoPlayerValue.errorDescription
+          },
         ),
       );
-
-      if (isResourceError && !hasCachingResourceError) {
-        hasCachingResourceError = true;
-
-        print(
-          "VIDEO PLAYER :: Resource unavailable from cache server :: Retrying without cache",
-        );
-
-        await retryDataSource(
-          betterPlayerDataSource?.copyWith(
-            cacheConfiguration: const BetterPlayerCacheConfiguration(
-              useCache: false,
-            ),
-          ),
-        );
-      } else {
-        String? ignorableError = ignorableErrorLogs.where((errorLog) {
-          return cleanErrorString.contains(errorLog);
-        }).firstOrNull;
-
-        if (ignorableError != null) {
-          _postEvent(
-            BetterPlayerEvent(
-              BetterPlayerEventType.exception,
-              parameters: <String, dynamic>{"exception": errorString},
-            ),
-          );
-        }
-      }
     }
     if (currentVideoPlayerValue.initialized &&
         !_hasCurrentDataSourceInitialized) {
@@ -1255,32 +1180,14 @@ class BetterPlayerController {
   }
 
   ///Retry data source if playback failed.
-  Future retryDataSource([BetterPlayerDataSource? updatedDataSource]) async {
-    if (updatedDataSource != null) {
-      _betterPlayerDataSource = updatedDataSource;
-    }
-
-    _hasCurrentDataSourceInitialized = false;
-
-    await _setupDataSource(updatedDataSource ?? _betterPlayerDataSource!);
-
+  Future retryDataSource() async {
+    await _setupDataSource(_betterPlayerDataSource!);
     if (_videoPlayerValueOnError != null) {
       final position = _videoPlayerValueOnError!.position;
       await seekTo(position);
-      // await play();
+      await play();
       _videoPlayerValueOnError = null;
     }
-
-    await setLooping(betterPlayerConfiguration.looping);
-
-    postEvent(
-      BetterPlayerEvent(
-        BetterPlayerEventType.retryDataSourceWithoutCache,
-        parameters: <String, dynamic>{
-          _dataSourceParameter: betterPlayerDataSource,
-        },
-      ),
-    );
   }
 
   ///Set [audioTrack] in player. Works only for HLS or DASH streams.

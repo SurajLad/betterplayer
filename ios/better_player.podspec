@@ -14,15 +14,11 @@ A new flutter plugin project.
   s.source           = { :path => '.' }
   s.source_files = 'Classes/**/*'
   s.public_header_files = 'Classes/**/*.h'
-  s.dependency 'Flutter' 
+  s.dependency 'Flutter'
   s.dependency 'Cache', '~> 6.0.0'
   s.dependency 'GCDWebServer'
   s.dependency 'HLSCachingReverseProxyServer'
   s.dependency 'PINCache'
-  s.static_framework = true
-  s.dependency 'Firebase/Core'
-  s.dependency 'Firebase/Analytics'
-  s.dependency 'Firebase/Auth'
   
   s.platform = :ios, '11.0'
   s.swift_versions = ['5.0']

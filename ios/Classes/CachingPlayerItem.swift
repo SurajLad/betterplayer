@@ -3,7 +3,6 @@
 import Foundation
 import AVFoundation
 
-
 fileprivate extension URL {
     
     func withScheme(_ scheme: String) -> URL? {
@@ -40,6 +39,7 @@ open class CachingPlayerItem: AVPlayerItem {
     class ResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate, URLSessionDelegate, URLSessionDataDelegate, URLSessionTaskDelegate {
         
         var playingFromData = false
+        var originalURL: URL?
         var mimeType: String? // is required when playing from Data
         var session: URLSession?
         var headers: Dictionary<NSObject,AnyObject>?
@@ -68,7 +68,7 @@ open class CachingPlayerItem: AVPlayerItem {
             let configuration = URLSessionConfiguration.default
             configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
             session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-            var request = URLRequest(url: url)
+            var request = URLRequest(url: self.originalURL ?? url)
             request.httpMethod = "GET"
             let headersString = self.headers as? [String:AnyObject]
             if let unwrappedDict = headersString {
@@ -222,6 +222,7 @@ open class CachingPlayerItem: AVPlayerItem {
             urlWithCustomScheme.deletePathExtension()
             urlWithCustomScheme.appendPathExtension(ext)
             self.customFileExtension = ext
+            self.resourceLoaderDelegate.originalURL = url
         }
         
         let asset = AVURLAsset(url: urlWithCustomScheme)

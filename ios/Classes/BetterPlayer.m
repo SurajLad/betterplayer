@@ -20,7 +20,11 @@ AVPictureInPictureController *_pipController;
 #endif
 
 @implementation BetterPlayer
+#ifdef BETTER_PLAYER_FLUTTER_TEXTURE
+- (instancetype)initWithFrameUpdater:(FrameUpdater*)frameUpdater {
+#else
 - (instancetype)initWithFrame:(CGRect)frame {
+#endif
     self = [super init];
     NSAssert(self, @"super init cannot be nil");
     _isInitialized = false;
@@ -32,6 +36,13 @@ AVPictureInPictureController *_pipController;
     if (@available(iOS 10.0, *)) {
         _player.automaticallyWaitsToMinimizeStalling = false;
     }
+  
+#ifdef BETTER_PLAYER_FLUTTER_TEXTURE
+  _displayLink = [CADisplayLink displayLinkWithTarget:frameUpdater
+                                             selector:@selector(onDisplayLink:)];
+  [_displayLink addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
+  _displayLink.paused = YES;
+#endif
     self._observersAdded = false;
     return self;
 }
@@ -64,35 +75,34 @@ AVPictureInPictureController *_pipController;
                                                  selector:@selector(itemDidPlayToEndTime:)
                                                      name:AVPlayerItemDidPlayToEndTimeNotification
                                                    object:item];
-
-        // [[NSNotificationCenter defaultCenter] addObserver:self
-        //                                  selector:@selector(handleErrorLogEntry:)
-        //                                      name:AVPlayerItemNewErrorLogEntryNotification
-        //                                    object:nil];
-
         self._observersAdded = true;
     }
 }
 
-// - (void)handleErrorLogEntry:(NSNotification *)notification {
-//     AVPlayerItem *playerItem = notification.object;
-//     AVPlayerItemErrorLog *errorLog = playerItem.errorLog;
-//     AVPlayerItemErrorLogEvent *lastEvent = [errorLog.events lastObject];
-//     NSString *lastErrorComment = lastEvent.errorComment;
-
-//     if (_eventSink != nil) {
-//         _eventSink([FlutterError
-//                     errorWithCode:@"VideoError"
-//                     message:[@"Failed to load video: " stringByAppendingString:lastErrorComment]
-//                     details:nil]);
-//     }
-
-// }
+#ifdef BETTER_PLAYER_FLUTTER_TEXTURE
+- (void)removeVideoOutput {
+    _videoOutput = nil;
+    if (_player.currentItem == nil) {
+        return;
+    }
+    NSArray<AVPlayerItemOutput*>* outputs = [[_player currentItem] outputs];
+    for (AVPlayerItemOutput* output in outputs) {
+        [[_player currentItem] removeOutput:output];
+    }
+}
+#endif
 
 - (void)clear {
+  
+#ifdef BETTER_PLAYER_FLUTTER_TEXTURE
+    _displayLink.paused = YES;
+#endif
     _isInitialized = false;
     _isPlaying = false;
     _disposed = false;
+#ifdef BETTER_PLAYER_FLUTTER_TEXTURE
+    _videoOutput = nil;
+#endif
     _failedCount = 0;
     _key = nil;
     if (_player.currentItem == nil) {
@@ -102,7 +112,6 @@ AVPictureInPictureController *_pipController;
     if (_player.currentItem == nil) {
         return;
     }
-
 
     [self removeObservers];
     AVAsset* asset = [_player.currentItem asset];
@@ -126,11 +135,7 @@ AVPictureInPictureController *_pipController;
         [[_player currentItem] removeObserver:self
                                    forKeyPath:@"playbackBufferFull"
                                       context:playbackBufferFullContext];
-        // [[NSNotificationCenter defaultCenter] removeObserver:self
-        //                                         name:AVPlayerItemNewErrorLogEntryNotification
-        //                                       object:nil];
         [[NSNotificationCenter defaultCenter] removeObserver:self];
-
         self._observersAdded = false;
     }
 }
@@ -139,15 +144,20 @@ AVPictureInPictureController *_pipController;
     if (_isLooping) {
         AVPlayerItem* p = [notification object];
         [p seekToTime:kCMTimeZero completionHandler:nil];
-        _eventSink(@{@"event" : @"completed", @"key" : _key});
     } else {
         if (_eventSink) {
             _eventSink(@{@"event" : @"completed", @"key" : _key});
             [ self removeObservers];
 
         }
+#ifdef BETTER_PLAYER_FLUTTER_TEXTURE
+      [_player pause];
+      _isPlaying = false;
+      _displayLink.paused = YES;
+#endif
     }
 }
+
 
 static inline CGFloat radiansToDegrees(CGFloat radians) {
     // Input range [-pi, pi] or [-180, 180]
@@ -159,6 +169,30 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     // Output degrees in between [0, 360[
     return degrees;
 };
+
+#ifdef BETTER_PLAYER_FLUTTER_TEXTURE
+- (void)addVideoOutput {
+    if (_player.currentItem == nil) {
+        return;
+    }
+    
+    if (_videoOutput) {
+        NSArray<AVPlayerItemOutput*>* outputs = [[_player currentItem] outputs];
+        for (AVPlayerItemOutput* output in outputs) {
+            if (output == _videoOutput) {
+                return;
+            }
+        }
+    }
+    
+    NSDictionary* pixBuffAttributes = @{
+        (id)kCVPixelBufferPixelFormatTypeKey : @(kCVPixelFormatType_32BGRA),
+        (id)kCVPixelBufferIOSurfacePropertiesKey : @{}
+    };
+    _videoOutput = [[AVPlayerItemVideoOutput alloc] initWithPixelBufferAttributes:pixBuffAttributes];
+    [_player.currentItem addOutput:_videoOutput];
+}
+#endif
 
 - (void)setDataSourceAsset:(NSString*)asset withKey:(NSString*)key withCertificateUrl:(NSString*)certificateUrl withLicenseUrl:(NSString*)licenseUrl cacheKey:(NSString*)cacheKey cacheManager:(CacheManager*)cacheManager overriddenDuration:(int) overriddenDuration{
     NSString* path = [[NSBundle mainBundle] pathForResource:asset ofType:nil];
@@ -315,12 +349,11 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
     else if (context == statusContext) {
         AVPlayerItem* item = (AVPlayerItem*)object;
-        AVPlayerItemErrorLog *errorLog;
-        NSData *logData;
-        NSString *strData;
         switch (item.status) {
             case AVPlayerItemStatusFailed:
-                NSLog(@"rpc: Failed to load video with error: %@", item.error.debugDescription);
+                NSLog(@"Failed to load video:");
+                NSLog(item.error.debugDescription);
+
                 if (_eventSink != nil) {
                     _eventSink([FlutterError
                                 errorWithCode:@"VideoError"
@@ -330,10 +363,8 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
                 }
                 break;
             case AVPlayerItemStatusUnknown:
-                NSLog(@"rpc: Status unknown");
                 break;
             case AVPlayerItemStatusReadyToPlay:
-                NSLog(@"rpc: Status ready to play");
                 [self onReadyToPlay];
                 break;
         }
@@ -357,6 +388,9 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)updatePlayingState {
     if (!_isInitialized || !_key) {
+#ifdef BETTER_PLAYER_FLUTTER_TEXTURE
+        _displayLink.paused = YES;
+#endif
         return;
     }
     if (!self._observersAdded){
@@ -374,6 +408,9 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     } else {
         [_player pause];
     }
+#ifdef BETTER_PLAYER_FLUTTER_TEXTURE
+    _displayLink.paused = !_isPlaying;
+#endif
 }
 
 - (void)onReadyToPlay {
@@ -415,6 +452,9 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
         }
 
         _isInitialized = true;
+#ifdef BETTER_PLAYER_FLUTTER_TEXTURE
+        [self addVideoOutput];
+#endif
         [self updatePlayingState];
         _eventSink(@{
             @"event" : @"initialized",
@@ -493,11 +533,7 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
         result([FlutterError errorWithCode:@"unsupported_speed"
                                    message:@"Speed must be >= 0.0 and <= 2.0"
                                    details:nil]);
-    } else if ((speed > 1.0 && _player.currentItem.canPlayFastForward) ||
-               (speed < 1.0 && _player.currentItem.canPlaySlowForward)) {
-        _playerRate = speed;
-        result(nil);
-    } else {
+    } else if ((speed > 1.0) || (speed < 1.0)) { _playerRate = speed; result(nil); } else {
         if (speed > 1.0) {
             result([FlutterError errorWithCode:@"unsupported_fast_forward"
                                        message:@"This video cannot be played fast forward"
@@ -665,6 +701,66 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 #endif
 
+#ifdef BETTER_PLAYER_FLUTTER_TEXTURE
+// This workaround if you will change dataSource. Flutter engine caches CVPixelBufferRef and if you
+// return NULL from method copyPixelBuffer Flutter will use cached CVPixelBufferRef. If you will
+// change your datasource you can see frame from previeous video. Thats why we should return
+// trasparent frame for this situation
+- (CVPixelBufferRef)prevTransparentBuffer {
+    if (_prevBuffer) {
+        CVPixelBufferLockBaseAddress(_prevBuffer, 0);
+        
+        int bufferWidth = CVPixelBufferGetWidth(_prevBuffer);
+        int bufferHeight = CVPixelBufferGetHeight(_prevBuffer);
+        unsigned char* pixel = (unsigned char*)CVPixelBufferGetBaseAddress(_prevBuffer);
+        
+        for (int row = 0; row < bufferHeight; row++) {
+            for (int column = 0; column < bufferWidth; column++) {
+                pixel[0] = 0;
+                pixel[1] = 0;
+                pixel[2] = 0;
+                pixel[3] = 0;
+                pixel += 4;
+            }
+        }
+        CVPixelBufferUnlockBaseAddress(_prevBuffer, 0);
+        return _prevBuffer;
+    }
+    return _prevBuffer;
+}
+
+
+- (CVPixelBufferRef)copyPixelBuffer {
+    //Disabled because of black frame issue
+    /*if (!_videoOutput || !_isInitialized || !_isPlaying || !_key || ![_player currentItem] ||
+     ![[_player currentItem] isPlaybackLikelyToKeepUp]) {
+     return [self prevTransparentBuffer];
+     }*/
+    
+    CMTime outputItemTime = [_videoOutput itemTimeForHostTime:CACurrentMediaTime()];
+    if ([_videoOutput hasNewPixelBufferForItemTime:outputItemTime]) {
+        _failedCount = 0;
+        _prevBuffer = [_videoOutput copyPixelBufferForItemTime:outputItemTime itemTimeForDisplay:NULL];
+        return _prevBuffer;
+    } else {
+        // AVPlayerItemVideoOutput.hasNewPixelBufferForItemTime doesn't work correctly
+        _failedCount++;
+        if (_failedCount > 100) {
+            _failedCount = 0;
+            [self removeVideoOutput];
+            [self addVideoOutput];
+        }
+        return NULL;
+    }
+}
+
+- (void)onTextureUnregistered {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self dispose];
+    });
+}
+#endif
+
 - (FlutterError* _Nullable)onCancelWithArguments:(id _Nullable)arguments {
     _eventSink = nil;
     return nil;
@@ -688,6 +784,9 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 - (void)disposeSansEventChannel {
     @try{
         [self clear];
+#ifdef BETTER_PLAYER_FLUTTER_TEXTURE
+        [_displayLink invalidate];
+#endif
     }
     @catch(NSException *exception) {
         NSLog(exception.debugDescription);
@@ -700,7 +799,6 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     [_eventChannel setStreamHandler:nil];
     [self disablePictureInPicture];
     [self setPictureInPicture:false];
-    [_player replaceCurrentItemWithPlayerItem:nil];
     _disposed = true;
 }
 

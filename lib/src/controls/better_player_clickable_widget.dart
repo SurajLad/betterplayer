@@ -19,7 +19,7 @@ class BetterPlayerMaterialClickableWidget extends StatelessWidget {
       ),
       clipBehavior: Clip.hardEdge,
       color: Colors.transparent,
-      child: InkWell(
+      child: GestureDetector(
         onTap: onTap,
         child: child,
       ),

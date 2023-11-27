@@ -19,8 +19,10 @@ class _HlsTracksPageState extends State<HlsTracksPage> {
     );
     BetterPlayerDataSource dataSource = BetterPlayerDataSource(
       BetterPlayerDataSourceType.network,
-      Constants.hlsTestStreamUrl,
-      useAsmsSubtitles: true,
+      // Constants.hlsTestStreamUrl,
+      "https://live-par-2-abr.livepush.io/vod/bigbuckbunny/index.m3u8",
+      // "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8",
+      videoFormat: BetterPlayerVideoFormat.hls,
     );
     _betterPlayerController = BetterPlayerController(betterPlayerConfiguration);
     _betterPlayerController.setupDataSource(dataSource);
@@ -31,7 +33,7 @@ class _HlsTracksPageState extends State<HlsTracksPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("HLS tracks"),
+        title: Text("HLS "),
       ),
       body: Column(
         children: [
